@@ -8,9 +8,6 @@ function BatteryModel() {
   const { scene } = useGLTF('/glbBattery2.glb')
   const { camera, size } = useThree()
 
-
-  
-
   
   // Calculate smaller battery position and scale
   const { position, scale } = useMemo(() => {
