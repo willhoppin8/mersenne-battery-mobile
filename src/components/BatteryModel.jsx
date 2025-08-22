@@ -24,7 +24,7 @@ function BatteryModel() {
     const smallestDimension = Math.min(visibleWidth, visibleHeight)
     
     // A little smaller scale factor and a little lower position
-    const scaleFactor = smallestDimension * 0.16 // Reduced from 0.18 to 0.16 for a little smaller
+    const scaleFactor = smallestDimension * 0.15 // Reduced from 0.16 to 0.15 for just a little smaller
     
     return {
       position: [0, -0.9, 0], // A little lower position on screen
