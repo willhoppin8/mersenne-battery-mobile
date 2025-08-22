@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState, useEffect } from 'react'
+import { useRef, useMemo } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
@@ -6,17 +6,13 @@ import * as THREE from 'three'
 function BatteryModel() {
   const meshRef = useRef()
   const { scene } = useGLTF('/glbBattery2.glb')
-  const { camera, size, gl } = useThree()
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
-  const [isDragging, setIsDragging] = useState(false)
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
-  const [batteryRotation, setBatteryRotation] = useState({ x: 0, y: -Math.PI / 4, z: 0 })
+  const { camera, size } = useThree()
 
 
   
 
   
-  // Calculate responsive position and scale based on screen size
+  // Calculate smaller battery position and scale
   const { position, scale } = useMemo(() => {
     const aspect = size.width / size.height
     const fov = camera.fov * (Math.PI / 180) // Convert to radians
@@ -27,32 +23,12 @@ function BatteryModel() {
     const visibleWidth = visibleHeight * aspect
     const smallestDimension = Math.min(visibleWidth, visibleHeight)
     
-    // Responsive scaling based on screen size - smaller base scaling
-    let scaleFactor
-    if (smallestDimension < 3) {
-      // Mobile phones - keep very small for safety
-      scaleFactor = smallestDimension * 0.10 // 10% of smallest dimension
-    } else if (smallestDimension < 6) {
-      // Tablets/small laptops - moderate scaling
-      scaleFactor = smallestDimension * 0.13 // 13% of smallest dimension
-    } else if (smallestDimension < 10) {
-      // Laptops - bigger but controlled
-      scaleFactor = smallestDimension * 0.16 // 16% of smallest dimension
-    } else {
-      // Large screens/desktop - allow bigger with reasonable max
-      scaleFactor = Math.min(smallestDimension * 0.20, 2.0) // 20% but cap at 2.0
-    }
-    
-    const batteryScale = scaleFactor
-    
-    // Center the battery horizontally, scale-dependent Y position
-    const xPosition = 0
-    // Larger batteries need to be positioned much lower
-    const yPosition = -0.5 - (batteryScale * 0.8) // Base position + aggressive scale-based offset
+    // A little smaller scale factor and a little lower position
+    const scaleFactor = smallestDimension * 0.16 // Reduced from 0.18 to 0.16 for a little smaller
     
     return {
-      position: [xPosition, yPosition, 0],
-      scale: batteryScale
+      position: [0, -0.9, 0], // A little lower position on screen
+      scale: scaleFactor
     }
   }, [camera.fov, size.width, size.height])
   
@@ -144,104 +120,16 @@ function BatteryModel() {
 
   }, [scene])
   
-  // Track mouse movement
-  useEffect(() => {
-    const handleMouseMove = (event) => {
-      // Convert screen coordinates to normalized device coordinates (-1 to +1)
-      const x = (event.clientX / window.innerWidth) * 2 - 1
-      const y = -(event.clientY / window.innerHeight) * 2 + 1
-      setMousePosition({ x, y })
-    }
-    
-    const handleMouseDown = (event) => {
-      setIsDragging(true)
-      setDragStart({ x: event.clientX, y: event.clientY })
-      
-      // Capture current visual rotation as the new base rotation
-      if (meshRef.current) {
-        setBatteryRotation({
-          x: meshRef.current.rotation.x,
-          y: meshRef.current.rotation.y,
-          z: meshRef.current.rotation.z
-        })
-      }
-    }
-    
-    const handleMouseUp = () => {
-      setIsDragging(false)
-    }
-    
 
-    
-    const handleMouseDrag = (event) => {
-      if (isDragging) {
-        const deltaX = event.clientX - dragStart.x
-        const deltaY = event.clientY - dragStart.y
-        
-        setBatteryRotation(prev => ({
-          x: prev.x + deltaY * 0.003,
-          y: prev.y + deltaX * 0.003,
-          z: prev.z
-        }))
-        
-        setDragStart({ x: event.clientX, y: event.clientY })
-      }
-    }
-    
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mousemove', handleMouseDrag)
-    window.addEventListener('mousedown', handleMouseDown)
-    window.addEventListener('mouseup', handleMouseUp)
-    
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mousemove', handleMouseDrag)
-      window.removeEventListener('mousedown', handleMouseDown)
-      window.removeEventListener('mouseup', handleMouseUp)
-    }
-  }, [isDragging, dragStart])
 
-  // Make battery follow cursor or use drag rotation
-  useFrame(() => {
+  // Auto-spinning animation
+  useFrame((state) => {
     if (meshRef.current) {
-      // Define pivot point higher than the battery's center
-      const pivotOffset = 1.5 // How much higher the pivot should be
+      // Continuous rotation around Y axis
+      meshRef.current.rotation.y = state.clock.elapsedTime * 0.5 // Adjust speed by changing multiplier
       
-      if (!isDragging) {
-        // Follow cursor with gentle, molasses-like delay
-        const targetRotationY = mousePosition.x * 0.2 + batteryRotation.y // Reduced from 0.5 to 0.2
-        const targetRotationX = -mousePosition.y * 0.15 + batteryRotation.x // Reduced from 0.3 to 0.15
-        
-        // Apply rotation around higher pivot point with molasses-like delay
-        const currentRotY = THREE.MathUtils.lerp(meshRef.current.rotation.y, targetRotationY, 0.03)
-        const currentRotX = THREE.MathUtils.lerp(meshRef.current.rotation.x, targetRotationX, 0.03)
-        
-        // Set rotation
-        meshRef.current.rotation.y = currentRotY
-        meshRef.current.rotation.x = currentRotX
-        
-        // Adjust position to rotate around higher pivot
-        const offsetZ = -Math.sin(currentRotX) * pivotOffset
-        const offsetY = (1 - Math.cos(currentRotX)) * pivotOffset
-        
-        meshRef.current.position.y = position[1] + offsetY
-        meshRef.current.position.z = position[2] + offsetZ
-        meshRef.current.position.x = position[0]
-        
-      } else {
-        // Use drag rotation when dragging
-        meshRef.current.rotation.x = batteryRotation.x
-        meshRef.current.rotation.y = batteryRotation.y
-        meshRef.current.rotation.z = batteryRotation.z
-        
-        // Apply same pivot offset for drag mode
-        const offsetZ = -Math.sin(batteryRotation.x) * pivotOffset
-        const offsetY = (1 - Math.cos(batteryRotation.x)) * pivotOffset
-        
-        meshRef.current.position.y = position[1] + offsetY
-        meshRef.current.position.z = position[2] + offsetZ
-        meshRef.current.position.x = position[0]
-      }
+      // Set position to center
+      meshRef.current.position.set(...position)
     }
   })
 
